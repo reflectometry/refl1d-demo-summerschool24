@@ -65,7 +65,6 @@ jobs:
       run: |
         npm i
         npm link
-        npm link bumps-webview-client
       working-directory: refl1d/refl1d/webview/client
     - name: checkout code
       uses: actions/checkout@v4
