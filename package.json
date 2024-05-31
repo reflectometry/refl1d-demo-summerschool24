@@ -1,0 +1,39 @@
+{
+  "name": "refl1d-demo",
+  "version": "1.0.0",
+  "description": "pyodide-based web demo of refl1d",
+  "main": "dist/index.html",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build --emptyOutDir -m development",
+    "build_prod": "vite build --emptyOutDir -m production",
+    "build_standalone": "vite build --emptyOutDir -m standalone",
+    "preview": "vite preview --port 4173"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reflectometry/refl1d-demo.git"
+  },
+  "keywords": [
+    "reflectometry",
+    "montecarlo",
+    "mcmc",
+    "bumps",
+    "webassembly",
+    "pyodide"
+  ],
+  "author": "Brian B. Maranville",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/reflectometry/refl1d-demo/issues"
+  },
+  "homepage": "https://github.com/reflectometry/refl1d-demo#readme",
+  "dependencies": {
+    "bumps-webview-client": "^0.1.14",
+    "refl1d-webview-client": "^0.1.20",
+    "pyodide": "^0.25.1",
+    "vite": "^5.2.10",
+    "@vitejs/plugin-vue": "^5.0.4"
+  }
+}
