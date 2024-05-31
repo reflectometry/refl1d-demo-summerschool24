@@ -19,6 +19,8 @@ jobs:
         python-version: ["3.11"]
 
     steps:
+    - name: checkout code
+      uses: actions/checkout@v4
     - uses: conda-incubator/setup-miniconda@v2
       with:
         auto-update-conda: true
@@ -66,8 +68,6 @@ jobs:
         npm i
         npm link
       working-directory: refl1d/refl1d/webview/client
-    - name: checkout code
-      uses: actions/checkout@v4
     - name: npm initialize self
       run: |
         npm i
