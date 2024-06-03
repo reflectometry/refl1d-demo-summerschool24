@@ -25,6 +25,7 @@ export default ({mode}) => {
       APP_VERSION: JSON.stringify(process.env.npm_package_version),
       REFL1D_WHEEL_FILE: JSON.stringify(process.env.REFL1D_WHEEL_FILE),
       BUMPS_WHEEL_FILE: JSON.stringify(process.env.BUMPS_WHEEL_FILE),
+      MOLGROUPS_WHEEL_FILE: JSON.stringify(process.env.MOLGROUPS_WHEEL_FILE),
     },
     worker: {
       format: 'es',
