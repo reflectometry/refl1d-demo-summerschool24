@@ -60,8 +60,7 @@ jobs:
     - name: Build molgroups
       run: |
         cd molgroups
-        pyodide build
-        pyodide py-compile dist
+        python -m build --wheel
         echo "MOLGROUPS_DIST=$(realpath dist)" >> $GITHUB_ENV
         echo "MOLGROUPS_WHEEL_FILE=$(ls dist)" >> $GITHUB_ENV
     - name: Use Node.js ${{ matrix.node-version }}
@@ -90,6 +89,7 @@ jobs:
         mkdir -p public/wheels
         cp $BUMPS_DIST/$BUMPS_WHEEL_FILE public/wheels/
         cp $REFL1D_DIST/$REFL1D_WHEEL_FILE public/wheels/
+        cp $MOLGROUPS_DIST/$MOLGROUPS_WHEEL_FILE public/wheels/
         rm -rf dist
         npm run build
         echo "deploy_path=$(realpath dist)" >> $GITHUB_OUTPUT
