@@ -9,6 +9,7 @@ var pyodide: PyodideInterface;
 
 declare const REFL1D_WHEEL_FILE: string;
 declare const BUMPS_WHEEL_FILE: string;
+declare const MOLGROUPS_WHEEL_FILE: string;
 
 async function loadPyodideAndPackages() { // loads pyodide
     pyodide = await loadPyodide({
@@ -30,6 +31,7 @@ async function loadPyodideAndPackages() { // loads pyodide
     ])
     await micropip.install("../wheels/${BUMPS_WHEEL_FILE}")
     await micropip.install("../wheels/${REFL1D_WHEEL_FILE}", keep_going=True, deps=False)
+    await micropip.install("../wheels/${MOLGROUPS_WHEEL_FILE}", keep_going=True, deps=False)
 
     import dill
     from bumps.webview.server import api
