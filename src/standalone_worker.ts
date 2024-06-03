@@ -10,6 +10,7 @@ const DEBUG = true;
 
 declare const REFL1D_WHEEL_FILE: string;
 declare const BUMPS_WHEEL_FILE: string;
+declare const MOLGROUPS_WHEEL_FILE: string;
 
 async function loadPyodideBase() {
     return await loadPyodide({
@@ -34,6 +35,7 @@ async function doPipInstalls(pyodide: PyodideInterface) {
     ])
     await micropip.install("../wheels/${BUMPS_WHEEL_FILE}")
     await micropip.install("../wheels/${REFL1D_WHEEL_FILE}", keep_going=True, deps=False)
+    await micropip.install("../wheels/${MOLGROUPS_WHEEL_FILE}", keep_going=True, deps=False)
 
     `);
 }
@@ -47,6 +49,7 @@ async function createAPI(pyodide: PyodideInterface) {
     import refl1d.fitplugin
     api.state.parallel = 0
     api.state.problem.serializer = "dataclass"
+    import molgroups
     print("api imported")
 
     import refl1d
@@ -129,7 +132,12 @@ async function createAPI(pyodide: PyodideInterface) {
     return api;
 }
 
-
+const ExampleFiles = [
+    { filename: "YIG_magnetic_example.json", path: "", source: "../examples/YIG_Py_300K_Combined_Annotated.json" },
+    { filename: "crau_popc.py", path: "/CrAu_POPC", source: "../examples/CrAu_POPC/crau_popc.py.txt"},
+    { filename: "cr001_d2o.refl", path: "/CrAu_POPC/dat", source: "../examples/CrAu_POPC/cr001_d2o.refl"},
+    { filename: "cr002_h2o.refl", path: "/CrAu_POPC/dat", source: "../examples/CrAu_POPC/cr002_h2o.refl"},    
+]
 
 const fit_worker = new Worker(new URL("./standalone_fit_worker.ts", import.meta.url), {type: 'module'});
 const FitServerClass = wrap<typeof FitServer>(fit_worker);
@@ -153,7 +161,11 @@ export class Server {
         await this.asyncEmit("server_startup_status", {status: "loading python", percent: 0});
         const pyodide = await loadPyodideBase();
         this.pyodide = pyodide;
-        pyodide.FS.createLazyFile("/home/pyodide", "YIG_magnetic_example.json", "../examples/YIG_Py_300K_Combined_Annotated.json", true, false);
+        for (let example_file of ExampleFiles) {
+            await pyodide.FS.mkdirTree(`/home/pyodide${example_file.path}`);
+            await pyodide.FS.createLazyFile(`/home/pyodide${example_file.path}`, example_file.filename, example_file.source, true, false);
+        }
+        //pyodide.FS.createLazyFile("/home/pyodide", "YIG_magnetic_example.json", "../examples/YIG_Py_300K_Combined_Annotated.json", true, false);
         await this.asyncEmit("server_startup_status", {status: "initializing builtin modules", percent: 25});
         await loadBuiltins(pyodide);
         await this.asyncEmit("server_startup_status", {status: "installing pip dependencies", percent: 50});
