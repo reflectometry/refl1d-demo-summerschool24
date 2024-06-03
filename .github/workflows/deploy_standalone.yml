@@ -44,6 +44,7 @@ jobs:
         git clone -b main --single-branch https://github.com/criosx/molgroups
     - name: Build bumps
       run: |
+        source "$CONDA_PREFIX/lib/python${{ matrix.python-version }}/site-packages/emsdk/emsdk_env.sh"
         cd bumps
         pyodide build
         pyodide py-compile dist
