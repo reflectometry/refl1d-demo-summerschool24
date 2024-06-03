@@ -41,10 +41,12 @@ jobs:
       run: |
         git clone -b webview --single-branch https://github.com/bumps/bumps
         git clone -b webview --single-branch https://github.com/reflectometry/refl1d
+        git clone -b main --single-branch https://github.com/criosx/molgroups
     - name: Build bumps
       run: |
         cd bumps
-        python setup.py bdist_wheel
+        pyodide build
+        pyodide py-compile dist
         echo "BUMPS_DIST=$(realpath dist)" >> $GITHUB_ENV
         echo "BUMPS_WHEEL_FILE=$(ls dist)" >> $GITHUB_ENV
     - name: Build refl1d
@@ -52,8 +54,16 @@ jobs:
         source "$CONDA_PREFIX/lib/python${{ matrix.python-version }}/site-packages/emsdk/emsdk_env.sh"
         cd refl1d
         BUILD_EXTENSION=True pyodide build
+        pyodide py-compile dist
         echo "REFL1D_DIST=$(realpath dist)" >> $GITHUB_ENV
         echo "REFL1D_WHEEL_FILE=$(ls dist)" >> $GITHUB_ENV
+    - name: Build molgroups
+      run: |
+        cd molgroups
+        pyodide build
+        pyodide py-compile dist
+        echo "MOLGROUPS_DIST=$(realpath dist)" >> $GITHUB_ENV
+        echo "MOLGROUPS_WHEEL_FILE=$(ls dist)" >> $GITHUB_ENV
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v3
       with:
