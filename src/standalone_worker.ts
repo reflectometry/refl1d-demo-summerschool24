@@ -246,15 +246,16 @@ export class Server {
     }
 
     async mount(dirHandle: FileSystemDirectoryHandle) {
-        // const dirHandle = await self.showDirectoryPicker();
-        console.log({dirHandle});   
-        const nativefs = await this.pyodide.mountNativeFS("/home/pyodide/user_mount", dirHandle);
+        const { FS } = this.pyodide;
+        const mountpoint = "/home/pyodide/local_mount";
+        const analyze = FS.analyzePath(mountpoint);
+        if (analyze.exists && analyze?.object?.mount?.mountpoint === mountpoint) {
+            console.log("unmounting existing mountpoint");
+            FS.unmount(mountpoint);
+        }
+        const nativefs = await this.pyodide.mountNativeFS(mountpoint, dirHandle);
         this.nativefs = nativefs;
-        await this.pyodide.runPythonAsync(`
-        import os
-        os.chdir("/home/pyodide/user_mount")
-
-        `);
+        this.asyncEmit("base_path", mountpoint.split("/").map((part) => (part === '') ? '/' : part));
     }
 
     async syncFS() {
