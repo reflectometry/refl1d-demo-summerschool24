@@ -30,7 +30,7 @@ jobs:
         use-mamba: true
     - name: Setup pyodide environment
       run: |
-        mamba install -y emsdk pyodide-build
+        mamba install -y emsdk pyodide-build==0.25.1
         mamba list
         echo $PATH
         PYODIDE_EMSCRIPTEN_VERSION=$(pyodide config get emscripten_version)
