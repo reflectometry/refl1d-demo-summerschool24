@@ -154,8 +154,10 @@ sample, sampleh = make_samples(bilayer, substrate, [d2o, h2o], sigma=sigma,
 datapath = './dat/'
 
 # substrate only
-probe = load4(datapath + 'cr001_d2o.refl', back_reflectivity=True, name='D2O buffer')
-probeh = load4(datapath + 'cr002_h2o.refl', back_reflectivity=True, name='H2O buffer')
+# probe = load4(datapath + 'cr001_d2o.refl', back_reflectivity=True, name='D2O buffer')
+# probeh = load4(datapath + 'cr002_h2o.refl', back_reflectivity=True, name='H2O buffer')
+probe = load4(datapath + 'cr001_d2o.ort', back_reflectivity=True, name='D2O buffer')
+probeh = load4(datapath + 'cr002_h2o.ort', back_reflectivity=True, name='H2O buffer')
 
 # Background parameter
 # probe.background.value = 0.0000
