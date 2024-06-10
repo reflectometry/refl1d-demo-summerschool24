@@ -48,7 +48,7 @@ async function loadPyodideAndPackages() { // loads pyodide
     api.FitThread.join = lambda self, timeout: None
 
     wrapped_api = {}
-    
+
     def expose(method, method_name):
         def wrapper(args):
             pyargs = args.to_py() if args is not None else []
@@ -59,10 +59,15 @@ async function loadPyodideAndPackages() { // loads pyodide
         if method_name in ["start_fit_thread"]:
             wrapped_api[method_name] = expose(method, method_name)
 
+    def set_autosave_session_interval(interval: int):
+        print("new interval", interval, type(interval))
+        api.state.shared.autosave_session_interval = interval
+
     def set_problem(dilled_problem):
         problem = dill.loads(dilled_problem)
         api.state.problem.fitProblem = problem
 
+    wrapped_api["set_autosave_session_interval"] = expose(set_autosave_session_interval, "set_autosave_session_interval")
     wrapped_api["set_problem"] = expose(set_problem, "set_problem")
 
     def fit_progress_handler(event):
@@ -73,9 +78,9 @@ async function loadPyodideAndPackages() { // loads pyodide
 
     api.EVT_FIT_PROGRESS.connect(fit_progress_handler, weak=True)
     api.EVT_FIT_COMPLETE.connect(fit_complete_handler, weak=True)
-    
+
     wrapped_api
-    `);
+`);
     return api;
 }
 

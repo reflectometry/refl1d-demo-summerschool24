@@ -1,5 +1,5 @@
 // import { loadPyodideAndPackages } from './pyodide_worker.mjs';
-import { expose, wrap, proxy } from 'comlink';
+import { expose, wrap, proxy, Remote } from 'comlink';
 import { loadPyodide, version } from 'pyodide';
 import type { PyodideInterface } from 'pyodide';
 import type { PyProxy } from 'pyodide/ffi';
@@ -60,7 +60,8 @@ async function createAPI(pyodide: PyodideInterface) {
     # setup backend:
     bumps.cli.install_plugin(refl1d.fitplugin)
     refl1d.use('c_ext')
-
+    
+    js_server_instance = object()
     wrapped_api = {}
 
     def expose(method, method_name):
@@ -77,11 +78,15 @@ async function createAPI(pyodide: PyodideInterface) {
 
     async def worker_fit_progress_handler(serialized_event):
         event = dill.loads(serialized_event)
+        if event.get("message") == "uncertainty_update":
+            # call back into the JavaScript server to sync the filesystem
+            await js_server_instance.syncFS()
         await api._fit_progress_handler(event)
 
     async def worker_fit_complete_handler(serialized_event):
         event = dill.loads(serialized_event)
         await api._fit_complete_handler(event)
+        await js_server_instance.syncFS()
 
     wrapped_api["evt_fit_progress"] = expose(worker_fit_progress_handler, "evt_fit_progress")
     wrapped_api["evt_fit_complete"] = expose(worker_fit_complete_handler, "evt_fit_complete")
@@ -117,6 +122,7 @@ async function createAPI(pyodide: PyodideInterface) {
         
         async def _run(self):
             dumped = dill.dumps(self.problem)
+            await api.emit("set_fit_thread_autosave_session_interval", self.uncertainty_update)
             await api.emit("set_fit_thread_problem", dumped)
             await api.emit("start_fit_thread_fit", self.fitclass.id, self.options, self.terminate_on_finish)
             await api.emit("add_notification", {
@@ -150,6 +156,7 @@ export class Server {
     pyodide: PyodideInterface;
     api: PyProxy;
     initialized: Promise<void>;
+    fit_server: Remote<FitServer>;
 
     constructor() {
         this.handlers = {};
@@ -175,19 +182,25 @@ export class Server {
         this.api = api;
         await this.asyncEmit("server_startup_status", {status: "api created", percent: 100});
         const fit_server = await FitServerPromise;
+        this.fit_server = fit_server;
         const abort_fit_signal = new Signal("fit_abort_event");
         const fit_complete_signal = new Signal("fit_complete_event");
         await fit_server.set_signal(abort_fit_signal);
         await this.set_signal(abort_fit_signal);
         await fit_server.set_signal(fit_complete_signal);
         await this.set_signal(fit_complete_signal);
-        const defineEmit = await pyodide.runPythonAsync(`
-            def defineEmit(server):
-                api.emit = server.asyncEmit;
+        const defineJSServer = await pyodide.runPythonAsync(`
+            def defineJSServer(js_server):
+                global js_server_instance
+                js_server_instance = js_server
+                api.emit = js_server.asyncEmit;
             
-            defineEmit
+            defineJSServer
         `);
-        await defineEmit(this);
+        await defineJSServer(this);
+        this.addHandler('set_fit_thread_autosave_session_interval', async (interval: number) => {
+            const result = await fit_server.onAsyncEmit('set_autosave_session_interval', interval);
+        });
         this.addHandler('set_fit_thread_problem', async (problem: any) => {
             const result = await fit_server.onAsyncEmit('set_problem', problem);
             console.log("set_fit_thread_problem result:", result);
