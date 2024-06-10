@@ -32,6 +32,7 @@ async function doPipInstalls(pyodide: PyodideInterface) {
         "periodictable",
         "blinker",
         "dill",
+        "orsopy",
     ])
     await micropip.install("../wheels/${BUMPS_WHEEL_FILE}")
     await micropip.install("../wheels/${REFL1D_WHEEL_FILE}", keep_going=True, deps=False)
@@ -141,8 +142,8 @@ async function createAPI(pyodide: PyodideInterface) {
 const ExampleFiles = [
     { filename: "YIG_magnetic_example.json", path: "", source: "../examples/YIG_Py_300K_Combined_Annotated.json" },
     { filename: "crau_popc.py", path: "/CrAu_POPC", source: "../examples/CrAu_POPC/crau_popc.py.txt"},
-    { filename: "cr001_d2o.refl", path: "/CrAu_POPC/dat", source: "../examples/CrAu_POPC/cr001_d2o.refl"},
-    { filename: "cr002_h2o.refl", path: "/CrAu_POPC/dat", source: "../examples/CrAu_POPC/cr002_h2o.refl"},    
+    { filename: "cr001_d2o.ort", path: "/CrAu_POPC/dat", source: "../examples/CrAu_POPC/cr001_d2o.ort"},
+    { filename: "cr002_h2o.ort", path: "/CrAu_POPC/dat", source: "../examples/CrAu_POPC/cr002_h2o.ort"},
 ]
 
 const fit_worker = new Worker(new URL("./standalone_fit_worker.ts", import.meta.url), {type: 'module'});
