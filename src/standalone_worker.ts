@@ -82,10 +82,10 @@ async function createAPI(pyodide: PyodideInterface) {
 
     async def worker_fit_progress_handler(serialized_event):
         event = dill.loads(serialized_event)
+        await api._fit_progress_handler(event)
         if event.get("message") == "uncertainty_update":
             # call back into the JavaScript server to sync the filesystem
             await js_server_instance.syncFS()
-        await api._fit_progress_handler(event)
 
     async def worker_fit_complete_handler(serialized_event):
         event = dill.loads(serialized_event)
