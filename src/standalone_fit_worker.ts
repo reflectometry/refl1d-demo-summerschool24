@@ -3,6 +3,7 @@ import { expose } from 'comlink';
 import { loadPyodide, version } from 'pyodide';
 import type { PyodideInterface } from 'pyodide';
 import { Signal } from './standalone_signal';
+import type { PyProxy } from 'pyodide/ffi';
 const DEBUG = true;
 
 var pyodide: PyodideInterface;
@@ -10,6 +11,8 @@ var pyodide: PyodideInterface;
 declare const REFL1D_WHEEL_FILE: string;
 declare const BUMPS_WHEEL_FILE: string;
 declare const MOLGROUPS_WHEEL_FILE: string;
+
+type APIResult = PyProxy | number | string | boolean | null | undefined;
 
 async function loadPyodideAndPackages() { // loads pyodide
     pyodide = await loadPyodide({
@@ -23,8 +26,6 @@ async function loadPyodideAndPackages() { // loads pyodide
     import micropip
     await micropip.install([
         "matplotlib",
-        "plotly",
-        "mpld3",
         "periodictable",
         "blinker",
         "dill",
@@ -67,8 +68,12 @@ async function loadPyodideAndPackages() { // loads pyodide
         problem = dill.loads(dilled_problem)
         api.state.problem.fitProblem = problem
 
+    def get_nllf():
+        return api.state.problem.fitProblem.nllf()
+
     wrapped_api["set_autosave_session_interval"] = expose(set_autosave_session_interval, "set_autosave_session_interval")
     wrapped_api["set_problem"] = expose(set_problem, "set_problem")
+    wrapped_api["get_nllf"] = expose(get_nllf, "get_nllf")
 
     def fit_progress_handler(event):
         api.emit("evt_fit_progress", dill.dumps(event))
@@ -161,10 +166,10 @@ export class Server {
         let r = await this.nativefs?.syncfs?.();
     }
 
-    async asyncEmit(signal: string, ...args: unknown[]) {
+    async asyncEmit(signal: string, ...args: APIResult[]) {
         // this is for emit() calls from the python server
         const js_args = args.map((arg) => {
-            return arg?.toJs?.({dict_converter: Object.fromEntries}) ?? arg;
+            return arg?.toJs?.({dict_converter: Object.fromEntries, create_pyproxies: false}) ?? arg;
         });
         const handlers = this.handlers[signal] ?? [];
         for (let handler of handlers) {
@@ -177,11 +182,12 @@ export class Server {
         // (which might be another server)
         const api = await pyodideReadyPromise;
         const callback = (args[args.length - 1] instanceof Function) ? args.pop() : null;
-        const result = await api.get(signal)(args);
-        const jsResult = result?.toJs?.({dict_converter: Object.fromEntries}) ?? result;
+        const result: PyProxy = await api.get(signal)(args);
+        const jsResult = result?.toJs?.({dict_converter: Object.fromEntries, create_pyproxies: false}) ?? result;
         if (callback !== null) {
             await callback(jsResult);
         }
+        result?.destroy?.();
         return jsResult;
     }
 

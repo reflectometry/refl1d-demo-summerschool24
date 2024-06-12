@@ -252,6 +252,7 @@ export class Server {
         signal_handlers = signal_handlers.filter((h) => {
             if (h === handler) {
                 console.log('matching worker handler found, removing: ', handler);
+                handler?.destroy?.();
                 return false;
             }
             return true;
@@ -279,7 +280,7 @@ export class Server {
     async asyncEmit(signal: string, ...args: unknown[]) {
         // this is for emit() calls from the python server
         const js_args = args.map((arg) => {
-            return arg?.toJs?.({dict_converter: Object.fromEntries}) ?? arg;
+            return arg?.toJs?.({dict_converter: Object.fromEntries, create_pyproxies: false}) ?? arg;
         });
         const handlers = this.handlers[signal] ?? [];
         for (let handler of handlers) {
@@ -291,11 +292,12 @@ export class Server {
         // this is for emit() calls from the client
         await this.initialized; // api ready after this...
         const callback = (args[args.length - 1] instanceof Function) ? args.pop() : null;
-        const result = await this.api.get(signal)(args);
-        const jsResult = result?.toJs?.({dict_converter: Object.fromEntries}) ?? result;
+        const result: PyProxy | undefined | number | string | null = await this.api.get(signal)(args);
+        const jsResult = result?.toJs?.({dict_converter: Object.fromEntries, create_pyproxies: false}) ?? result;
         if (callback !== null) {
             await callback(jsResult);
         }
+        result?.destroy?.();
         return jsResult;
     }
 
