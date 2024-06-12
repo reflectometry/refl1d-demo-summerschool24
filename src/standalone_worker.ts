@@ -43,6 +43,9 @@ async function doPipInstalls(pyodide: PyodideInterface) {
 
 async function createAPI(pyodide: PyodideInterface) {
     let api = await pyodide.runPythonAsync(`
+    import matplotlib
+    matplotlib.use("agg")
+    
     from typing import Any
     from bumps.webview.server import api
     import bumps.cli
