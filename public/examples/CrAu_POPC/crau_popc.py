@@ -11,7 +11,7 @@ from periodictable.fasta import Sequence, H2O_SLD, D2O_SLD
 
 # === Constant definition section ===
 # Canvas
-DIMENSION = 400
+DIMENSION = 300
 STEPSIZE = 0.5
 
 # Hermite Spline
@@ -188,3 +188,107 @@ modelh = Experiment(sample=sampleh, probe=probeh, dz=STEPSIZE, step_interfaces =
 #problem = FitProblem([model0, model0h, model, model_prot, modelh_prot])
 problem = FitProblem([model, modelh])
 #problem = FitProblem([model, modelh])
+
+def custom_plot():
+
+    import plotly.graph_objs as go
+    from refl1d.webview.server.colors import COLORS
+
+    moldat = problem.moldat
+
+    def hex_to_rgb(hex_string):
+        r_hex = hex_string[1:3]
+        g_hex = hex_string[3:5]
+        b_hex = hex_string[5:7]
+        return int(r_hex, 16), int(g_hex, 16), int(b_hex, 16)
+
+    n_lipids = 1
+    group_names = {'gold substrate': ['bilayer.substrate'],
+               #'silicon oxide': ['bilayer.siox'],
+               'bME': ['bilayer.bME'],
+               'tether': ['bilayer.tether_bme', 'bilayer.tether_free', 'bilayer.tether_hg'],
+               'tether acyl chains': ['bilayer.tether_methylene', 'bilayer.tether_methyl'],
+               'inner headgroups': [f'bilayer.headgroup1_{i}' for i in range(1, n_lipids + 1)],
+               'inner acyl chains': [f'bilayer.methylene1_{i}' for i in range(1, n_lipids + 1)] + [f'bilayer.methyl1_{i}' for i in range(1, n_lipids + 1)],
+               'outer acyl chains': [f'bilayer.methylene2_{i}' for i in range(1, n_lipids + 1)] + [f'bilayer.methyl2_{i}' for i in range(1, n_lipids + 1)],
+               'outer headgroups': [f'bilayer.headgroup2_{i}' for i in range(1, n_lipids + 1)],
+              }
+    
+    normarea = moldat['bilayer.normarea']['area']
+
+    fig = go.Figure()
+    traces = []
+    MOD_COLORS = COLORS[1:]
+    color_idx = 1
+    sumarea = 0
+    for lbl, item in group_names.items():
+        area = 0
+        for gp in item:
+            if gp in moldat.keys():
+                zaxis = moldat[gp]['zaxis']
+                area += moldat[gp]['area']
+            else:
+                print(f'Warning: {gp} not found')
+
+        color = MOD_COLORS[color_idx % len(MOD_COLORS)]
+        plotly_color = ','.join(map(str, hex_to_rgb(color)))
+        traces.append(go.Scatter(x=zaxis,
+                                 y=area / normarea,
+                                 mode='lines',
+                                 name=lbl,
+                                 line=dict(color=color)))
+        traces.append(go.Scatter(x=zaxis,
+                                 y=area / normarea,
+                                 mode='lines',
+                                 line=dict(width=0),
+                                 fill='tozeroy',
+                                 fillcolor=f'rgba({plotly_color},0.3)',
+                                 showlegend=False
+                                 ))
+        color_idx += 1
+        sumarea += area
+
+    color = COLORS[0]
+    plotly_color = ','.join(map(str, hex_to_rgb(color)))
+    
+    traces.append(go.Scatter(x=zaxis,
+                                y=sumarea / normarea,
+                                mode='lines',
+                                name='buffer',
+                                line=dict(color=color)))
+    traces.append(go.Scatter(x=zaxis,
+                                y=sumarea / normarea,
+                                mode='lines',
+                                line=dict(width=0),
+                                fill='tonexty',
+                                fillcolor=f'rgba({plotly_color},0.3)',
+                                showlegend=False
+                                ))    
+    traces.append(go.Scatter(x=zaxis,
+                                y=[1.0] * len(zaxis),
+                                mode='lines',
+                                line=dict(color=color, width=0),
+                                showlegend=False))
+
+    
+    fig.add_traces(traces[::-1])
+
+    fig.update_layout(
+        title='Component Volume Occupancy',
+        template = 'plotly_white',
+        xaxis_title=dict(text='z (Ang)'),
+        yaxis_title=dict(text='volume occupancy')
+    )
+
+    return fig
+
+setattr(problem, 'custom_plot', custom_plot)
+
+if __name__ == '__main__':
+
+    problem.chisq_str()
+
+    moldat = problem.moldat
+
+    fig = custom_plot(moldat)
+    fig.show()
