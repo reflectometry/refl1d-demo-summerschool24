@@ -8,10 +8,6 @@ import type { Server as FitServer } from './standalone_fit_worker';
 
 const DEBUG = true;
 
-declare const REFL1D_WHEEL_FILE: string;
-declare const BUMPS_WHEEL_FILE: string;
-declare const MOLGROUPS_WHEEL_FILE: string;
-
 async function loadPyodideBase() {
     return await loadPyodide({
         indexURL: `https://cdn.jsdelivr.net/pyodide/v${version}/full/`
@@ -34,10 +30,13 @@ async function doPipInstalls(pyodide: PyodideInterface) {
         "dill",
         "orsopy",
     ])
-    await micropip.install("../wheels/${BUMPS_WHEEL_FILE}")
-    await micropip.install("../wheels/${REFL1D_WHEEL_FILE}", keep_going=True, deps=False)
-    await micropip.install("../wheels/${MOLGROUPS_WHEEL_FILE}", keep_going=True, deps=False)
+    `);
+}
 
+async function installLocalWheel(pyodide: PyodideInterface, wheel_file: string) {
+    await pyodide.runPythonAsync(`
+    import micropip
+    await micropip.install("${wheel_file}", keep_going=True, deps=False)
     `);
 }
 
@@ -142,13 +141,6 @@ async function createAPI(pyodide: PyodideInterface) {
     return api;
 }
 
-const ExampleFiles = [
-    { filename: "YIG_magnetic_example.json", path: "", source: "../examples/YIG_Py_300K_Combined_Annotated.json" },
-    { filename: "crau_popc.py", path: "/CrAu_POPC", source: "../examples/CrAu_POPC/crau_popc.py.txt"},
-    { filename: "cr001_d2o.ort", path: "/CrAu_POPC/dat", source: "../examples/CrAu_POPC/cr001_d2o.ort"},
-    { filename: "cr002_h2o.ort", path: "/CrAu_POPC/dat", source: "../examples/CrAu_POPC/cr002_h2o.ort"},
-]
-
 const fit_worker = new Worker(new URL("./standalone_fit_worker.ts", import.meta.url), {type: 'module'});
 const FitServerClass = wrap<typeof FitServer>(fit_worker);
 const FitServerPromise = new FitServerClass();
@@ -172,15 +164,27 @@ export class Server {
         await this.asyncEmit("server_startup_status", {status: "loading python", percent: 0});
         const pyodide = await loadPyodideBase();
         this.pyodide = pyodide;
-        for (let example_file of ExampleFiles) {
-            await pyodide.FS.mkdirTree(`/home/pyodide${example_file.path}`);
-            await pyodide.FS.createLazyFile(`/home/pyodide${example_file.path}`, example_file.filename, example_file.source, true, false);
-        }
-        //pyodide.FS.createLazyFile("/home/pyodide", "YIG_magnetic_example.json", "../examples/YIG_Py_300K_Combined_Annotated.json", true, false);
+        
         await this.asyncEmit("server_startup_status", {status: "initializing builtin modules", percent: 25});
         await loadBuiltins(pyodide);
         await this.asyncEmit("server_startup_status", {status: "installing pip dependencies", percent: 50});
         await doPipInstalls(pyodide);
+        const preloaded_files_result = await fetch("../preloaded_files.json");
+        if (preloaded_files_result.ok) {
+            const preloaded_files = await preloaded_files_result.json() as { filename: string, path: string, source: string }[];
+            for (let preload_file of preloaded_files) {
+                if (preload_file.path.startsWith("public/examples")) {
+                    const target_path = preload_file.path.replace(/^public\/examples/, "/home/pyodide");
+                    await pyodide.FS.mkdirTree(target_path);
+                    await pyodide.FS.createLazyFile(target_path, preload_file.filename, preload_file.source, true, false);
+                }
+                if (preload_file.filename.endsWith(".whl")) {
+                    console.log("installing wheel:", preload_file.filename);
+                    await installLocalWheel(pyodide, preload_file.source);
+                }
+                
+            }
+        }
         await this.asyncEmit("server_startup_status", {status: "loading bumps and refl1d", percent: 75});
         const api = await createAPI(pyodide);
         this.api = api;

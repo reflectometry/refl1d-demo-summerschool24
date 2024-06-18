@@ -6,7 +6,6 @@ import { Signal } from './standalone_signal';
 import type { PyProxy } from 'pyodide/ffi';
 const DEBUG = true;
 
-var pyodide: PyodideInterface;
 
 declare const REFL1D_WHEEL_FILE: string;
 declare const BUMPS_WHEEL_FILE: string;
@@ -14,15 +13,19 @@ declare const MOLGROUPS_WHEEL_FILE: string;
 
 type APIResult = PyProxy | number | string | boolean | null | undefined;
 
-async function loadPyodideAndPackages() { // loads pyodide
-    pyodide = await loadPyodide({
-        indexURL: `https://cdn.jsdelivr.net/pyodide/v${version}/full/`
-    }); // run the function and wait for the result (base library)
 
-    await pyodide.loadPackage(["numpy", "scipy", "pytz", "h5py", "micropip"]); // waits until these python packpages are loaded to continue
-  
-    //import reductus library with micropip
-    let api = await pyodide.runPythonAsync(`
+async function loadPyodideBase() {
+    return await loadPyodide({
+        indexURL: `https://cdn.jsdelivr.net/pyodide/v${version}/full/`
+    });
+}
+
+async function loadBuiltins(pyodide: PyodideInterface) {
+    await pyodide.loadPackage(["numpy", "scipy", "pytz", "h5py", "micropip"]);
+}
+
+async function doPipInstalls(pyodide: PyodideInterface) {
+    await pyodide.runPythonAsync(`
     import micropip
     await micropip.install([
         "matplotlib",
@@ -30,10 +33,18 @@ async function loadPyodideAndPackages() { // loads pyodide
         "blinker",
         "dill",
     ])
-    await micropip.install("../wheels/${BUMPS_WHEEL_FILE}")
-    await micropip.install("../wheels/${REFL1D_WHEEL_FILE}", keep_going=True, deps=False)
-    await micropip.install("../wheels/${MOLGROUPS_WHEEL_FILE}", keep_going=True, deps=False)
+    `);
+}
 
+async function installLocalWheel(pyodide: PyodideInterface, wheel_file: string) {
+    await pyodide.runPythonAsync(`
+    import micropip
+    await micropip.install("${wheel_file}", keep_going=True, deps=False)
+    `);
+}
+
+async function createAPI(pyodide: PyodideInterface) {
+    let api = await pyodide.runPythonAsync(`
     import dill
     from bumps.webview.server import api
     from refl1d.webview.server import api as refl1d_api
@@ -89,24 +100,58 @@ async function loadPyodideAndPackages() { // loads pyodide
     return api;
 }
 
+async function loadPyodideAndPackages() { // loads pyodide
+    const pyodide = await loadPyodideBase(); // run the function and wait for the result (base library)
+    await loadBuiltins(pyodide); // waits until these python packpages are loaded to continue
+    await doPipInstalls(pyodide);
+    const preloaded_files_result = await fetch("../preloaded_files.json");
+    let preloaded_files: { filename: string, path: string, source: string }[] = [];
+    if (preloaded_files_result.ok) {
+        preloaded_files = await preloaded_files_result.json() as { filename: string, path: string, source: string }[];
+        for (let preload_file of preloaded_files) {
+            if (preload_file.filename.endsWith(".whl")) {
+                await installLocalWheel(pyodide, preload_file.source);
+            }
+        }
+    }
+    const api = await createAPI(pyodide);
+    return api;
+}
+
 // export { loadPyodideAndPackages };
 
-let pyodideReadyPromise = loadPyodideAndPackages(); // run the functions stored in lines 4
+// let pyodideReadyPromise = loadPyodideAndPackages(); // run the functions stored in lines 4
 
 type EventCallback = (message?: any) => any;
 
 export class Server {
     handlers: { [signal: string]: EventCallback[] }
+    pyodide: PyodideInterface;
+    initialized: Promise<PyProxy>;
     nativefs: any;
 
     constructor() {
         this.handlers = {};
         this.nativefs = null;
-        this.init();
+        this.initialized = this.init();
     }
 
     async init() {
-        const api = await pyodideReadyPromise;
+        const pyodide = await loadPyodideBase(); // run the function and wait for the result (base library)
+        await loadBuiltins(pyodide); // waits until these python packpages are loaded to continue
+        await doPipInstalls(pyodide);
+        const preloaded_files_result = await fetch("../preloaded_files.json");
+        let preloaded_files: { filename: string, path: string, source: string }[] = [];
+        if (preloaded_files_result.ok) {
+            preloaded_files = await preloaded_files_result.json() as { filename: string, path: string, source: string }[];
+            for (let preload_file of preloaded_files) {
+                if (preload_file.filename.endsWith(".whl")) {
+                    await installLocalWheel(pyodide, preload_file.source);
+                }
+            }
+        }
+        const api = await createAPI(pyodide);
+        this.pyodide = pyodide;
         const defineEmit = await pyodide.runPythonAsync(`
             def defineEmit(server):
                 api.emit = server.asyncEmit;
@@ -114,14 +159,15 @@ export class Server {
             defineEmit
          `);
         await defineEmit(this);
+        return api;
     }
 
     async set_signal(signal_in: Signal) {
-        const api = await pyodideReadyPromise;
+        const api = await this.initialized;
         const { name, buffer } = signal_in;
         const signal = new Signal(name, buffer);
         console.log("setting abort signal in worker", signal);
-        const defineFitEvent = await pyodide.runPythonAsync(`
+        const defineFitEvent = await this.pyodide.runPythonAsync(`
             def defineFitEvent(event):
                 api.state.${name} = event.to_py();
             
@@ -137,7 +183,7 @@ export class Server {
             console.log(`adding handler: ${signal}`);
         }
         if (signal === 'connect') {
-            await pyodideReadyPromise;
+            await this.initialized;
             await handler();
         }
         this.handlers[signal] = signal_handlers;
@@ -158,7 +204,7 @@ export class Server {
     async mount(dirHandle: FileSystemDirectoryHandle) {
         // const dirHandle = await self.showDirectoryPicker();
         console.log({dirHandle});   
-        const nativefs = await pyodide.mountNativeFS("/home/pyodide/user_mount", dirHandle);
+        const nativefs = await this.pyodide.mountNativeFS("/home/pyodide/user_mount", dirHandle);
         this.nativefs = nativefs;
     }
 
@@ -180,7 +226,7 @@ export class Server {
     async onAsyncEmit(signal: string, ...args: any[]) {
         // this is for responding to incoming emit() calls from the client
         // (which might be another server)
-        const api = await pyodideReadyPromise;
+        const api = await this.initialized;
         const callback = (args[args.length - 1] instanceof Function) ? args.pop() : null;
         const result: PyProxy = await api.get(signal)(args);
         const jsResult = result?.toJs?.({dict_converter: Object.fromEntries, create_pyproxies: false}) ?? result;
