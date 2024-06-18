@@ -40,7 +40,7 @@ jobs:
     - name: Clone git repos
       run: |
         git clone -b webview --single-branch https://github.com/bumps/bumps
-        git clone -b webview --single-branch https://github.com/reflectometry/refl1d
+        git clone -b demo_summerschool_2024 --single-branch https://github.com/reflectometry/refl1d
         git clone -b main --single-branch https://github.com/criosx/molgroups
     - name: Build bumps
       run: |
