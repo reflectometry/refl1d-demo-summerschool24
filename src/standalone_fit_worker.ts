@@ -100,28 +100,6 @@ async function createAPI(pyodide: PyodideInterface) {
     return api;
 }
 
-async function loadPyodideAndPackages() { // loads pyodide
-    const pyodide = await loadPyodideBase(); // run the function and wait for the result (base library)
-    await loadBuiltins(pyodide); // waits until these python packpages are loaded to continue
-    await doPipInstalls(pyodide);
-    const preloaded_files_result = await fetch("../preloaded_files.json");
-    let preloaded_files: { filename: string, path: string, source: string }[] = [];
-    if (preloaded_files_result.ok) {
-        preloaded_files = await preloaded_files_result.json() as { filename: string, path: string, source: string }[];
-        for (let preload_file of preloaded_files) {
-            if (preload_file.filename.endsWith(".whl")) {
-                await installLocalWheel(pyodide, preload_file.source);
-            }
-        }
-    }
-    const api = await createAPI(pyodide);
-    return api;
-}
-
-// export { loadPyodideAndPackages };
-
-// let pyodideReadyPromise = loadPyodideAndPackages(); // run the functions stored in lines 4
-
 type EventCallback = (message?: any) => any;
 
 export class Server {
@@ -199,17 +177,6 @@ export class Server {
             return true;
         })
         this.handlers[signal] = signal_handlers;
-    }
-
-    async mount(dirHandle: FileSystemDirectoryHandle) {
-        // const dirHandle = await self.showDirectoryPicker();
-        console.log({dirHandle});   
-        const nativefs = await this.pyodide.mountNativeFS("/home/pyodide/user_mount", dirHandle);
-        this.nativefs = nativefs;
-    }
-
-    async syncFS() {
-        let r = await this.nativefs?.syncfs?.();
     }
 
     async asyncEmit(signal: string, ...args: APIResult[]) {
