@@ -1,13 +1,10 @@
 # === Import section ===
-import sys
 import numpy as np
 from molgroups import mol
 from molgroups import components as cmp
 from molgroups import lipids
 from refl1d.names import Parameter, SLD, Slab, Experiment, FitProblem, load4
-from refl1d.probe import QProbe
 from refl1d.flayer import FunctionalProfile
-from periodictable.fasta import Sequence, H2O_SLD, D2O_SLD
 
 # === Constant definition section ===
 # Canvas
@@ -18,10 +15,6 @@ STEPSIZE = 0.5
 CONTROLPOINTS = 7
 SPACING = 15.0
 
-# SLDS
-NSLDH2O = H2O_SLD
-NSLDD2O = D2O_SLD
-
 def bilayer(z, sigma, bulknsld, global_rough, rho_substrate, l_lipid1, l_lipid2, l_tether,  nf_tether, mult_tether, vf_bilayer):
     """ Generic tethered bilayer """
 
@@ -29,7 +22,7 @@ def bilayer(z, sigma, bulknsld, global_rough, rho_substrate, l_lipid1, l_lipid2,
     bulknsld = bulknsld * 1e-6
     rho_substrate = rho_substrate * 1e-6
 
-    blm.fnSet(sigma=sigma, bulknsld=bulknsld, global_rough=global_rough, rho_substrate=rho_substrate,
+    blm.fnSet(sigma=sigma, bulknsld=bulknsld, global_rough=sigma, rho_substrate=rho_substrate,
               l_lipid1=l_lipid1, l_lipid2=l_lipid2, l_tether=l_tether, nf_tether=nf_tether, mult_tether=mult_tether,
               vf_bilayer=vf_bilayer, radius_defect=1e8)
 
@@ -89,7 +82,7 @@ def make_samples(func, substrate, contrasts, **kwargs):
 vf_bilayer = Parameter(name='volume fraction bilayer', value=0.9).range(0.0, 1.0)
 l_lipid1 = Parameter(name='inner acyl chain thickness', value=10.0).range(8, 30)
 l_lipid2 = Parameter(name='outer acyl chain thickness', value=10.0).range(8, 18)
-sigma = Parameter(name='bilayer roughness', value=5).range(2, 9)
+sigma = Parameter(name='bilayer roughness', value=5).range(0.5, 9)
 global_rough = Parameter(name ='substrate roughness', value=5).range(2, 9)
 d_oxide = Parameter(name='silicon oxide layer thickness', value=10).range(5, 30)
 d_Cr =  Parameter(name='chromium layer thickness', value=40).range(10, 150)
@@ -97,14 +90,14 @@ d_gold =  Parameter(name='gold layer thickness', value=140).range(100, 200) #thi
 rough_cr_au =  Parameter(name='gold chromium roughness', value=10).range(2, 24.0) # roughness of Cr/Au interface
 l_tether =  Parameter(name='tether thickness', value=10).range(3, 50) #distance from substrate to inner headgroup/acyl chain interface
 nf_tether = Parameter(name='number fraction tether', value=0.5).range(0.1, 0.7)
-mult_tether = Parameter(name='multiplicity tether', value=1.0).range(0.1, 10)
+mult_tether = Parameter(name='bME to tether ratio', value=1.0).range(0.1, 10)
 
 ### Define bilayer object
 #POPS = cmp.Lipid(name='POPS', headgroup=cmp.ps, tails=[cmp.palmitoyl, cmp.palmitoyl], methyls=[cmp.methyl])
 #POPE = cmp.Lipid(name='POPE', headgroup=cmp.pe, tails=[cmp.palmitoyl, cmp.oleoyl], methyls=[cmp.methyl])
 #DOPIP2 = cmp.Lipid(name='DOPIP2', headgroup=cmp.pip2, tails=[cmp.oleoyl, cmp.oleoyl], methyls=[cmp.methyl])
-
-blm = mol.tBLM(tether=lipids.WC14, filler=cmp.bme, lipids=[lipids.DOPC],
+DOPC = cmp.Lipid(name='DOPC', headgroup=cmp.pc, tails=2 * [cmp.oleoyl], methyls=[cmp.methyl])
+blm = mol.tBLM(tether=lipids.WC14, filler=cmp.bme, lipids=[DOPC],
                 lipid_nf=[1.0])
 
 ## === Stack ===
@@ -154,8 +147,6 @@ sample, sampleh = make_samples(bilayer, substrate, [d2o, h2o], sigma=sigma,
 datapath = './dat/'
 
 # substrate only
-# probe = load4(datapath + 'cr001_d2o.refl', back_reflectivity=True, name='D2O buffer')
-# probeh = load4(datapath + 'cr002_h2o.refl', back_reflectivity=True, name='H2O buffer')
 probe = load4(datapath + 'cr001_d2o.ort', back_reflectivity=True, name='D2O buffer')
 probeh = load4(datapath + 'cr002_h2o.ort', back_reflectivity=True, name='H2O buffer')
 
@@ -185,9 +176,7 @@ step = False
 model = Experiment(sample=sample, probe=probe, dz=STEPSIZE, step_interfaces = step)
 modelh = Experiment(sample=sampleh, probe=probeh, dz=STEPSIZE, step_interfaces = step)
 
-#problem = FitProblem([model0, model0h, model, model_prot, modelh_prot])
 problem = FitProblem([model, modelh])
-#problem = FitProblem([model, modelh])
 
 def custom_plot():
 
@@ -226,7 +215,7 @@ def custom_plot():
         for gp in item:
             if gp in moldat.keys():
                 zaxis = moldat[gp]['zaxis']
-                area += moldat[gp]['area']
+                area += np.maximum(0, moldat[gp]['area'])
             else:
                 print(f'Warning: {gp} not found')
 
@@ -287,8 +276,4 @@ setattr(problem, 'custom_plot', custom_plot)
 if __name__ == '__main__':
 
     problem.chisq_str()
-
-    moldat = problem.moldat
-
-    fig = custom_plot(moldat)
-    fig.show()
+    problem.custom_plot().show()
