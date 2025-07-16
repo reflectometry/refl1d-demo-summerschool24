@@ -21,6 +21,8 @@ jobs:
     steps:
     - name: checkout code
       uses: actions/checkout@v4
+      with:
+        submodules: true
     - uses: conda-incubator/setup-miniconda@v3
       with:
         auto-update-conda: true
@@ -34,14 +36,10 @@ jobs:
         mamba list
         echo $PATH
         PYODIDE_EMSCRIPTEN_VERSION=$(pyodide config get emscripten_version)
+        emsdk update
         emsdk install ${PYODIDE_EMSCRIPTEN_VERSION}
         emsdk activate ${PYODIDE_EMSCRIPTEN_VERSION}
         source "$CONDA_PREFIX/lib/python${{ matrix.python-version }}/site-packages/emsdk/emsdk_env.sh"
-    - name: Clone git repos
-      run: |
-        git clone -b webview --single-branch https://github.com/bumps/bumps
-        git clone -b demo_summerschool_2024 --single-branch https://github.com/reflectometry/refl1d
-        git clone -b main --single-branch https://github.com/criosx/molgroups
     - name: Build bumps
       run: |
         source "$CONDA_PREFIX/lib/python${{ matrix.python-version }}/site-packages/emsdk/emsdk_env.sh"
@@ -68,22 +66,22 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
-    - name: initialize bumps client
-      run: |
-        npm i
-        npm link
-      working-directory: bumps/bumps/webview/client
-    - name: initialize refl1d client
-      run: |
-        npm i
-        npm link
-        npm link bumps-webview-client
-      working-directory: refl1d/refl1d/webview/client
+    # - name: initialize bumps client
+    #   run: |
+    #     npm i
+    #     npm link
+    #   working-directory: bumps/bumps/webview/client
+    # - name: initialize refl1d client
+    #   run: |
+    #     npm i
+    #     npm link
+    #     npm link bumps-webview-client
+    #   working-directory: refl1d/refl1d/webview/client
     - name: npm initialize self
       run: |
         npm i
-        npm link bumps-webview-client
-        npm link refl1d-webview-client
+        # npm link bumps-webview-client
+        # npm link refl1d-webview-client
     - name: build client
       id: build_client
       run: |
