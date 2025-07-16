@@ -28,6 +28,7 @@ async function doPipInstalls(pyodide: PyodideInterface) {
         "periodictable",
         "blinker",
         "dill",
+        "cloudpickle",
         "orsopy",
     ])
     `);
@@ -49,7 +50,7 @@ async function createAPI(pyodide: PyodideInterface) {
     from bumps.webview.server import api
     import bumps.cli
     from refl1d.webview.server import api as refl1d_api
-    import refl1d.fitplugin
+    from refl1d.bumps_interface import fitplugin
     api.state.parallel = 0
     api.state.problem.serializer = "dataclass"
     import molgroups
@@ -59,9 +60,10 @@ async function createAPI(pyodide: PyodideInterface) {
     import asyncio
     import json
     import dill
+    import cloudpickle
 
     # setup backend:
-    bumps.cli.install_plugin(refl1d.fitplugin)
+    bumps.cli.install_plugin(fitplugin)
     refl1d.use('c_ext')
     
     js_server_instance = object()
@@ -79,6 +81,11 @@ async function createAPI(pyodide: PyodideInterface) {
         print("wrapping:", method_name)
         wrapped_api[method_name] = expose(method, method_name)
 
+    async def set_base_path(pathlist):
+        # this is called from the client to set the base path
+        # but unused in the pyodide environment
+        pass
+
     async def worker_fit_progress_handler(serialized_event):
         event = dill.loads(serialized_event)
         await api._fit_progress_handler(event)
@@ -93,19 +100,23 @@ async function createAPI(pyodide: PyodideInterface) {
 
     wrapped_api["evt_fit_progress"] = expose(worker_fit_progress_handler, "evt_fit_progress")
     wrapped_api["evt_fit_complete"] = expose(worker_fit_complete_handler, "evt_fit_complete")
+    wrapped_api["set_base_path"] = expose(set_base_path, "set_base_path")
 
     from dataclasses import dataclass
 
     @dataclass
     class WorkerFitThread:
         fitclass: Any
-        abort_event: Any
+        fit_abort_event: Any
         problem: bumps.fitproblem.FitProblem
+        mapper: Any
         options: dict
         parallel: int
         convergence_update: int
         uncertainty_update: int
-        terminate_on_finish: bool
+        console_update: int = 500 # seconds
+        fit_state: Any = None # for resuming fits
+        convergence: Any = None # for resuming fits
 
         _alive = True
 
@@ -124,10 +135,10 @@ async function createAPI(pyodide: PyodideInterface) {
             self.run()
         
         async def _run(self):
-            dumped = dill.dumps(self.problem)
+            dumped = cloudpickle.dumps(self.problem)
             await api.emit("set_fit_thread_autosave_session_interval", self.uncertainty_update)
             await api.emit("set_fit_thread_problem", dumped)
-            await api.emit("start_fit_thread_fit", self.fitclass.id, self.options, self.terminate_on_finish)
+            await api.emit("start_fit_thread_fit", self.fitclass.id, self.options, False) # no resume for now
             await api.emit("add_notification", {
                 "title": "Fit Started",
                 "content": f"Fit started with problem: {api.state.problem.fitProblem.name}",
@@ -143,20 +154,23 @@ async function createAPI(pyodide: PyodideInterface) {
 
 const fit_worker = new Worker(new URL("./standalone_fit_worker.ts", import.meta.url), {type: 'module'});
 const FitServerClass = wrap<typeof FitServer>(fit_worker);
-const FitServerPromise = new FitServerClass();
 type EventCallback = (message?: any) => any;
 
 export class Server {
+    base_url: string;
     handlers: { [signal: string]: EventCallback[] }
     nativefs: any;
     pyodide: PyodideInterface;
     api: PyProxy;
     initialized: Promise<void>;
-    fit_server: Remote<FitServer>;
+    fit_server_promise: Promise<Remote<FitServer>>;
 
-    constructor() {
+    constructor(base_url: string) {
+        this.base_url = base_url;
         this.handlers = {};
         this.nativefs = null;
+        console.log(`starting server at ${base_url}`);
+        this.fit_server_promise = new FitServerClass(base_url);
         this.initialized = this.init();
     }
 
@@ -179,8 +193,8 @@ export class Server {
                     await pyodide.FS.createLazyFile(target_path, preload_file.filename, preload_file.source, true, false);
                 }
                 if (preload_file.filename.endsWith(".whl")) {
-                    console.log("installing wheel:", preload_file.filename);
-                    await installLocalWheel(pyodide, preload_file.source);
+                    console.log("installing wheel:", `${this.base_url}${preload_file.source}`);
+                    await installLocalWheel(pyodide, `${this.base_url}${preload_file.source}`);
                 }
                 
             }
@@ -189,8 +203,7 @@ export class Server {
         const api = await createAPI(pyodide);
         this.api = api;
         await this.asyncEmit("server_startup_status", {status: "api created", percent: 100});
-        const fit_server = await FitServerPromise;
-        this.fit_server = fit_server;
+        const fit_server = await this.fit_server_promise;
         const abort_fit_signal = new Signal("fit_abort_event");
         const fit_complete_signal = new Signal("fit_complete_event");
         await fit_server.set_signal(abort_fit_signal);
@@ -248,7 +261,7 @@ export class Server {
         }
         if (signal === 'connect') {
             await this.initialized;
-            await FitServerPromise;
+            await this.fit_server_promise;
             await handler();
         }
         this.handlers[signal] = signal_handlers;
@@ -299,7 +312,17 @@ export class Server {
         // this is for emit() calls from the client
         await this.initialized; // api ready after this...
         const callback = (args[args.length - 1] instanceof Function) ? args.pop() : null;
-        const result: PyProxy | undefined | number | string | null = await this.api.get(signal)(args);
+        console.debug(`onAsyncEmit: ${signal}`, {args, callback});
+        const api_function = this.api.get(signal);
+        if (api_function === undefined) {
+            throw new Error(`Signal ${signal} not found in API`);
+        }
+        else if (typeof api_function !== 'function') {
+            throw new Error(`Signal ${signal} is not a function in API`);
+        }
+        console.debug("api function:", api_function, "args:", args);
+
+        const result: PyProxy | undefined | number | string | null = await api_function(args);
         const jsResult = result?.toJs?.({dict_converter: Object.fromEntries, create_pyproxies: false}) ?? result;
         if (callback !== null) {
             await callback(jsResult);

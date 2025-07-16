@@ -1,23 +1,26 @@
 // import { loadPyodideAndPackages } from './pyodide_worker.mjs';
 import { expose } from 'comlink';
-import { loadPyodide, version } from 'pyodide';
+import { version } from 'pyodide';
 import type { PyodideInterface } from 'pyodide';
 import { Signal } from './standalone_signal';
 import type { PyProxy } from 'pyodide/ffi';
 const DEBUG = true;
 
-
-declare const REFL1D_WHEEL_FILE: string;
-declare const BUMPS_WHEEL_FILE: string;
-declare const MOLGROUPS_WHEEL_FILE: string;
-
 type APIResult = PyProxy | number | string | boolean | null | undefined;
 
+const pyodide_url = new URL(`https://cdn.jsdelivr.net/pyodide/v${version}/full/pyodide.mjs`);
+const pyodide_index_url = new URL(`https://cdn.jsdelivr.net/pyodide/v${version}/full/`);
 
 async function loadPyodideBase() {
+    const pyodide_loader = await import(pyodide_url.href);
+    const { loadPyodide } = pyodide_loader;
     return await loadPyodide({
-        indexURL: `https://cdn.jsdelivr.net/pyodide/v${version}/full/`
+        indexURL: pyodide_index_url.href,
     });
+    // return await loadPyodide({
+    //     indexURL: "https://cdn.jsdelivr.net/pyodide/dev/full/"
+    //     // indexURL: `https://cdn.jsdelivr.net/pyodide/v${version}/full/`
+    // });
 }
 
 async function loadBuiltins(pyodide: PyodideInterface) {
@@ -32,11 +35,14 @@ async function doPipInstalls(pyodide: PyodideInterface) {
         "periodictable",
         "blinker",
         "dill",
+        "cloudpickle",
+        "orsopy",
     ])
     `);
 }
 
 async function installLocalWheel(pyodide: PyodideInterface, wheel_file: string) {
+    console.log(`Installing ${wheel_file} in fit worker`);
     await pyodide.runPythonAsync(`
     import micropip
     await micropip.install("${wheel_file}", keep_going=True, deps=False)
@@ -46,10 +52,13 @@ async function installLocalWheel(pyodide: PyodideInterface, wheel_file: string) 
 async function createAPI(pyodide: PyodideInterface) {
     let api = await pyodide.runPythonAsync(`
     import dill
+    import cloudpickle
     from bumps.webview.server import api
+    from bumps.mapper import SerialMapper
     from refl1d.webview.server import api as refl1d_api
     api.state.parallel = 0
     api.state.problem.serializer = "dataclass"
+    api.state.mapper = SerialMapper()
     import refl1d
 
     # setup backend:
@@ -76,7 +85,7 @@ async function createAPI(pyodide: PyodideInterface) {
         api.state.shared.autosave_session_interval = interval
 
     def set_problem(dilled_problem):
-        problem = dill.loads(dilled_problem)
+        problem = cloudpickle.loads(dilled_problem)
         api.state.problem.fitProblem = problem
 
     def get_nllf():
@@ -97,18 +106,22 @@ async function createAPI(pyodide: PyodideInterface) {
 
     wrapped_api
 `);
+    console.log("api created in fit_worker", api, Object.keys(api));
     return api;
 }
 
 type EventCallback = (message?: any) => any;
 
 export class Server {
+    base_url: string;
     handlers: { [signal: string]: EventCallback[] }
     pyodide: PyodideInterface;
     initialized: Promise<PyProxy>;
     nativefs: any;
 
-    constructor() {
+    constructor(base_url: string) {
+        console.log(`Server constructor: ${base_url}`);
+        this.base_url = base_url;
         this.handlers = {};
         this.nativefs = null;
         this.initialized = this.init();
@@ -124,7 +137,7 @@ export class Server {
             preloaded_files = await preloaded_files_result.json() as { filename: string, path: string, source: string }[];
             for (let preload_file of preloaded_files) {
                 if (preload_file.filename.endsWith(".whl")) {
-                    await installLocalWheel(pyodide, preload_file.source);
+                    await installLocalWheel(pyodide, `${this.base_url}${preload_file.source}`);
                 }
             }
         }
@@ -195,6 +208,7 @@ export class Server {
         // (which might be another server)
         const api = await this.initialized;
         const callback = (args[args.length - 1] instanceof Function) ? args.pop() : null;
+        console.log(`onAsyncEmit: ${signal}`, {args, callback});
         const result: PyProxy = await api.get(signal)(args);
         const jsResult = result?.toJs?.({dict_converter: Object.fromEntries, create_pyproxies: false}) ?? result;
         if (callback !== null) {
