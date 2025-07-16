@@ -1,0 +1,9 @@
+[submodule "bumps"]
+	path = bumps
+	url = https://github.com/bumps/bumps
+[submodule "refl1d"]
+	path = refl1d
+	url = https://github.com/reflectometry/refl1d
+[submodule "molgroups"]
+	path = molgroups
+	url = https://github.com/reflectometry/molgroups
