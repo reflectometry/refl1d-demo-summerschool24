@@ -30,9 +30,12 @@
   },
   "homepage": "https://github.com/reflectometry/refl1d-demo#readme",
   "dependencies": {
+    "bumps-webview-client": "file:bumps/bumps/webview/client",
+    "refl1d-webview-client": "file:refl1d/refl1d/webview/client",
     "@vitejs/plugin-vue": "^5.0.4",
     "comlink": "^4.4.1",
-    "pyodide": "^0.25.1",
-    "vite": "^5.2.10"
+    "pyodide": "^0.27.7",
+    "vite": "^5.2.10",
+    "vite-svg-loader": "^5.1.0"
   }
 }
