@@ -3,8 +3,7 @@ import numpy as np
 from molgroups import mol
 from molgroups import components as cmp
 from molgroups import lipids
-from refl1d.names import Parameter, SLD, Slab, Experiment, FitProblem, load4
-from refl1d.flayer import FunctionalProfile
+from refl1d.names import Parameter, SLD, Slab, Experiment, FitProblem, load4, FunctionalProfile
 
 # === Constant definition section ===
 # Canvas

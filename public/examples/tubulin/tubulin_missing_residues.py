@@ -3,8 +3,7 @@ import numpy as np
 from molgroups import mol
 from molgroups import components as cmp
 from molgroups import lipids
-from refl1d.names import load4, Parameter, SLD, Slab, Experiment, FitProblem
-from refl1d.flayer import FunctionalProfile
+from refl1d.names import load4, Parameter, SLD, Slab, Experiment, FitProblem, FunctionalProfile
 
 ### Define molgroups space.
 DIMENSION=400       # Number of steps
