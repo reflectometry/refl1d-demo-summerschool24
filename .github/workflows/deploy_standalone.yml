@@ -27,13 +27,13 @@ jobs:
       with:
         auto-update-conda: true
         python-version: ${{ matrix.python-version }}
-        miniforge-variant: Mambaforge
+        channels: conda-forge
         activate-environment: pyodide
-        use-mamba: true
     - name: Setup pyodide environment
       run: |
-        mamba install -y emsdk pyodide-build==0.25.1
-        mamba list
+        conda install -y emsdk
+        python -m pip install pyodide-build==0.30.5
+        conda list
         echo $PATH
         PYODIDE_EMSCRIPTEN_VERSION=$(pyodide config get emscripten_version)
         emsdk update
