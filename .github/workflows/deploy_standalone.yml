@@ -15,8 +15,8 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x]
-        python-version: ["3.11"]
+        node-version: [22]
+        python-version: ["3.12"]
 
     steps:
     - name: checkout code
