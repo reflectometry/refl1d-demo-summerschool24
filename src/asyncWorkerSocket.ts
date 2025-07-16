@@ -23,7 +23,8 @@ export class AsyncSocket {
     this.proxy_lookups = new Map();
     this.worker = worker;
     const ServerClass = wrap<Server>(worker);
-    this.ServerPromise = new ServerClass();
+    const base_url = `${window.location.href}assets/`;
+    this.ServerPromise = new ServerClass(base_url);
   }
   connect() {}
   on(signal: string, handler: EventCallback) {
